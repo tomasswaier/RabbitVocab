@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS words;
+DROP TYPE IF EXISTS word_state;

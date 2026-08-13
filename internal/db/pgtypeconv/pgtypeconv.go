@@ -1,6 +1,10 @@
 package pgtypeconv
 
-import "github.com/jackc/pgx/v5/pgtype"
+import (
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
 
 func TextFromPtr(s *string) pgtype.Text {
 	if s == nil {
@@ -14,4 +18,7 @@ func PtrFromText(t pgtype.Text) *string {
 		return nil
 	}
 	return &t.String
+}
+func TimestamptzFromTime(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t, Valid: true}
 }

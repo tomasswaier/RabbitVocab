@@ -109,6 +109,37 @@ func (h *WordHandler) UpdateState(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, wordEntity)
 }
+func (h *WordHandler) Search(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	query := r.URL.Query().Get("query")
+	if query == "" {
+		http.Error(w, "query param is required", http.StatusBadRequest)
+		return
+	}
+
+	var languageID *int64
+	if v := r.URL.Query().Get("languageId"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			http.Error(w, "languageId must be an integer", http.StatusBadRequest)
+			return
+		}
+		languageID = &id
+	}
+
+	words, err := h.words.SearchWords(r.Context(), userID, languageID, query)
+	if err != nil {
+		handleWordServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, words)
+}
 
 func handleWordServiceError(w http.ResponseWriter, err error) {
 	switch {
@@ -119,4 +150,25 @@ func handleWordServiceError(w http.ResponseWriter, err error) {
 	default:
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
+}
+func (h *WordHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid word id", http.StatusBadRequest)
+		return
+	}
+	if err := h.words.DeleteWord(r.Context(), userID, id); err != nil {
+		if errors.Is(err, word.ErrNotFoundOrForbidden) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

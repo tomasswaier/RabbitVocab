@@ -53,6 +53,31 @@ func (r *PostgresRepository) UpdateState(ctx context.Context, id int64, state St
 	}
 	return toEntity(row), nil
 }
+func (r *PostgresRepository) Search(ctx context.Context, languageID int64, query string) ([]*Word, error) {
+	rows, err := r.q.SearchWords(ctx, sqlc.SearchWordsParams{
+		LanguageID: languageID,
+		Query:      query,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Word, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toEntity(row))
+	}
+	return out, nil
+
+}
+func (r *PostgresRepository) Delete(ctx context.Context, wordID, userID int64) (bool, error) {
+	rows, err := r.q.DeleteWord(ctx, sqlc.DeleteWordParams{
+		ID:     wordID,
+		UserID: userID,
+	})
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
 
 func toEntity(row sqlc.Word) *Word {
 	return &Word{

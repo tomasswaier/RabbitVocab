@@ -11,11 +11,21 @@ import (
 type Querier interface {
 	CountLanguagesByUser(ctx context.Context, userID int64) (int64, error)
 	CreateLanguage(ctx context.Context, arg CreateLanguageParams) (Language, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteExpiredSessions(ctx context.Context) error
+	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
+	DeleteWord(ctx context.Context, arg DeleteWordParams) (int64, error)
+	DeleteWordForm(ctx context.Context, arg DeleteWordFormParams) (int64, error)
+	GetRandomWordForms(ctx context.Context, arg GetRandomWordFormsParams) ([]GetRandomWordFormsRow, error)
 	GetRandomWords(ctx context.Context, arg GetRandomWordsParams) ([]Word, error)
 	GetUserByAPIKeyHash(ctx context.Context, apiKeyHash string) (User, error)
+	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetValidSessionByTokenHash(ctx context.Context, tokenHash string) (Session, error)
 	InsertWord(ctx context.Context, arg InsertWordParams) (Word, error)
+	InsertWordForm(ctx context.Context, arg InsertWordFormParams) (WordForm, error)
 	ListLanguagesByUser(ctx context.Context, userID int64) ([]Language, error)
+	SearchWords(ctx context.Context, arg SearchWordsParams) ([]Word, error)
 	UpdateUserAPIKeyHash(ctx context.Context, arg UpdateUserAPIKeyHashParams) (User, error)
 	UpdateWordState(ctx context.Context, arg UpdateWordStateParams) (Word, error)
 }

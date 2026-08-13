@@ -58,7 +58,27 @@ func (s *Service) GetRandomWords(ctx context.Context, userID int64, languageID *
 	}
 	return s.words.GetRandom(ctx, resolvedID, count)
 }
+func (s *Service) SearchWords(ctx context.Context, userID int64, languageID *int64, query string) ([]*Word, error) {
+	resolvedID, err := s.resolveLanguageID(ctx, userID, languageID)
+	if err != nil {
+		return nil, err
+	}
+	return s.words.Search(ctx, resolvedID, query)
+}
 
 func (s *Service) UpdateWordState(ctx context.Context, id int64, state State) (*Word, error) {
 	return s.words.UpdateState(ctx, id, state)
+}
+
+var ErrNotFoundOrForbidden = errors.New("word not found or not owned by user")
+
+func (s *Service) DeleteWord(ctx context.Context, userID, wordID int64) error {
+	deleted, err := s.words.Delete(ctx, wordID, userID)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return ErrNotFoundOrForbidden
+	}
+	return nil
 }

@@ -62,6 +62,14 @@ type Language struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Session struct {
+	ID        int64              `json:"id"`
+	UserID    int64              `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type User struct {
 	ID           int64              `json:"id"`
 	Username     string             `json:"username"`
@@ -79,4 +87,13 @@ type Word struct {
 	State        WordState          `json:"state"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WordForm struct {
+	ID        int64              `json:"id"`
+	WordID    int64              `json:"word_id"`
+	Subject   string             `json:"subject"`
+	Form      string             `json:"form"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Tense     pgtype.Text        `json:"tense"`
 }

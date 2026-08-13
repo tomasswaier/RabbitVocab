@@ -14,8 +14,10 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/tomasswaier/RabbitVocab/internal/db/sqlc"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/language"
+	"github.com/tomasswaier/RabbitVocab/internal/domain/session"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/user"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/word"
+	"github.com/tomasswaier/RabbitVocab/internal/domain/wordform"
 	vocabhttp "github.com/tomasswaier/RabbitVocab/internal/http"
 	"github.com/tomasswaier/RabbitVocab/internal/http/handler"
 )
@@ -36,6 +38,7 @@ func run() error {
 
 	dbURL := getEnv("DATABASE_URL", "postgres://postgres@/vocab?host=/run/postgresql")
 	port := getEnv("PORT", "8080")
+	webDir := getEnv("WEB_DIR", "web")
 
 	pool, err := connectDB(ctx, dbURL)
 	if err != nil {
@@ -51,19 +54,22 @@ func run() error {
 	languageRepo := language.NewPostgresRepository(queries)
 	wordRepo := word.NewPostgresRepository(queries)
 	wordService := word.NewService(wordRepo, languageRepo)
+	wordFormRepo := wordform.NewPostgresRepository(queries)
+	wordFormService := wordform.NewService(wordFormRepo, languageRepo)
+	sessionRepo := session.NewPostgresRepository(queries)
+	sessionService := session.NewService(sessionRepo)
 
 	handlers := vocabhttp.Handlers{
-		Auth:     handler.NewAuthHandler(userRepo, languageRepo),
+		Auth:     handler.NewAuthHandler(userRepo, languageRepo, sessionService),
 		Language: handler.NewLanguageHandler(languageRepo),
 		Word:     handler.NewWordHandler(wordService),
+		WordForm: handler.NewWordFormHandler(wordFormService),
 	}
-
-	apiRouter := vocabhttp.NewRouter(handlers, userRepo)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthzHandler(pool))
-	mux.Handle("/", apiRouter)
-
+	vocabhttp.RegisterRoutes(mux, handlers, userRepo, sessionService)
+	mux.Handle("GET /", http.FileServer(http.Dir(webDir)))
 	srv := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,

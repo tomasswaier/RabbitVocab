@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RabbitVocab — Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center">
+  <div class="w-full max-w-sm bg-slate-800 rounded-xl shadow-lg p-8">
+    <h1 class="text-2xl font-semibold mb-1">RabbitVocab</h1>
+    <p class="text-slate-400 mb-6 text-sm">Sign in to continue</p>
+
+    <form id="login-form" class="space-y-4">
+      <div>
+        <label class="block text-sm mb-1 text-slate-300" for="username">Username</label>
+        <input id="username" name="username" type="text" required autocomplete="username"
+          class="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-sm mb-1 text-slate-300" for="password">Password</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password"
+          class="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+
+      <p id="error" class="text-red-400 text-sm hidden"></p>
+
+      <button type="submit"
+        class="w-full bg-indigo-600 hover:bg-indigo-500 transition rounded-lg py-2 font-medium">
+        Sign in
+      </button>
+    </form>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/login.js"></script>
+</body>
+</html>

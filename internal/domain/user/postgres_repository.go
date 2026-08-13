@@ -65,3 +65,13 @@ func toEntity(row sqlc.User) *User {
 		CreatedAt:    row.CreatedAt.Time,
 	}
 }
+func (r *PostgresRepository) GetByUsername(ctx context.Context, username string) (*User, error) {
+	row, err := r.q.GetUserByUsername(ctx, username)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return toEntity(row), nil
+}

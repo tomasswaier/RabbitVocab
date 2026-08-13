@@ -11,10 +11,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteWord = `-- name: DeleteWord :execrows
+DELETE FROM words
+WHERE words.id = $1
+  AND language_id IN (SELECT id FROM languages WHERE user_id = $2)
+`
+
+type DeleteWordParams struct {
+	ID     int64 `json:"id"`
+	UserID int64 `json:"user_id"`
+}
+
+func (q *Queries) DeleteWord(ctx context.Context, arg DeleteWordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteWord, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getRandomWords = `-- name: GetRandomWords :many
 SELECT id, language_id, native_word, learning_word, article, state, created_at, updated_at FROM words
 WHERE language_id = $1
-ORDER BY random()
+  AND state != 'mastered'
+ORDER BY
+    (CASE state
+        WHEN 'new'       THEN 4
+        WHEN 'learning'  THEN 3
+        WHEN 'confident' THEN 2
+        ELSE 1
+    END) * random() DESC
 LIMIT $2
 `
 
@@ -84,6 +110,48 @@ func (q *Queries) InsertWord(ctx context.Context, arg InsertWordParams) (Word, e
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const searchWords = `-- name: SearchWords :many
+SELECT id, language_id, native_word, learning_word, article, state, created_at, updated_at FROM words
+WHERE language_id = $1
+  AND learning_word ILIKE '%' || $2::text || '%'
+ORDER BY learning_word
+LIMIT 20
+`
+
+type SearchWordsParams struct {
+	LanguageID int64  `json:"language_id"`
+	Query      string `json:"query"`
+}
+
+func (q *Queries) SearchWords(ctx context.Context, arg SearchWordsParams) ([]Word, error) {
+	rows, err := q.db.Query(ctx, searchWords, arg.LanguageID, arg.Query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Word
+	for rows.Next() {
+		var i Word
+		if err := rows.Scan(
+			&i.ID,
+			&i.LanguageID,
+			&i.NativeWord,
+			&i.LearningWord,
+			&i.Article,
+			&i.State,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateWordState = `-- name: UpdateWordState :one

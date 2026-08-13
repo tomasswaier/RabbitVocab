@@ -3,11 +3,13 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/tomasswaier/RabbitVocab/internal/apikey"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/language"
+	"github.com/tomasswaier/RabbitVocab/internal/domain/session"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/user"
 	"github.com/tomasswaier/RabbitVocab/internal/http/middleware"
 )
@@ -15,10 +17,11 @@ import (
 type AuthHandler struct {
 	users     user.Repository
 	languages language.Repository
+	sessions  *session.Service
 }
 
-func NewAuthHandler(users user.Repository, languages language.Repository) *AuthHandler {
-	return &AuthHandler{users: users, languages: languages}
+func NewAuthHandler(users user.Repository, languages language.Repository, sessions *session.Service) *AuthHandler {
+	return &AuthHandler{users: users, languages: languages, sessions: sessions}
 }
 
 type registerRequest struct {
@@ -94,4 +97,63 @@ func (h *AuthHandler) RegenerateKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, regenerateKeyResponse{APIKey: rawKey})
+}
+
+type loginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	u, err := h.users.GetByUsername(r.Context(), req.Username)
+	if err != nil {
+		http.Error(w, "invalid username or password", http.StatusUnauthorized)
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
+		http.Error(w, "invalid username or password", http.StatusUnauthorized)
+		return
+	}
+
+	rawToken, expiresAt, err := h.sessions.Create(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "failed to create session", http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.SessionCookieName,
+		Value:    rawToken,
+		Expires:  expiresAt,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		// Secure: true, // enable once served over HTTPS
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(middleware.SessionCookieName); err == nil {
+		_ = h.sessions.Delete(r.Context(), cookie.Value)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.SessionCookieName,
+		Value:    "",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

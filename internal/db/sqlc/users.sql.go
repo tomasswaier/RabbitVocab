@@ -52,6 +52,24 @@ func (q *Queries) GetUserByAPIKeyHash(ctx context.Context, apiKeyHash string) (U
 	return i, err
 }
 
+const getUserByUsername = `-- name: GetUserByUsername :one
+SELECT id, username, password_hash, api_key_hash, created_at FROM users
+WHERE username = $1
+`
+
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByUsername, username)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.ApiKeyHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateUserAPIKeyHash = `-- name: UpdateUserAPIKeyHash :one
 UPDATE users
 SET api_key_hash = $2

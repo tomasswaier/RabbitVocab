@@ -8,10 +8,6 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        
-        mcp-inspector = pkgs.writeShellScriptBin "mcp-inspector" ''
-          ${pkgs.nodejs}/bin/npx @modelcontextprotocol/inspector "$@"
-        '';
       in
       {
         devShell = pkgs.mkShell {
@@ -19,17 +15,15 @@
             pkgs.go
             pkgs.gopls
             pkgs.golangci-lint
-            pkgs.nodejs
 						pkgs.sqlc
-            mcp-inspector
           ];
           
-          shellHook = ''
-            export PATH="$PATH:$(go env GOPATH)/bin"
-            echo "MCP development shell ready!"
-            echo "Run: mcp-inspector ./server/server"
-          '';
         };
+				shellHook = ''
+				  export PATH="$PATH:$(go env GOPATH)/bin"
+				  echo "MCP development shell ready!"
+				  echo "Run: mcp-inspector ./server/server"
+				'';
       }
     );
 }

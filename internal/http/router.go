@@ -33,4 +33,6 @@ func RegisterRoutes(mux *http.ServeMux, h Handlers, users user.Repository, sessi
 	mux.Handle("GET /word-forms/random", auth(http.HandlerFunc(h.WordForm.GetRandom)))
 	mux.Handle("DELETE /words/{id}", auth(http.HandlerFunc(h.Word.Delete)))
 	mux.Handle("DELETE /word-forms/{id}", auth(http.HandlerFunc(h.WordForm.Delete)))
+	mux.Handle("GET /words", auth(http.HandlerFunc(h.Word.List)))
+	mux.Handle("GET /word-forms", auth(http.HandlerFunc(h.WordForm.List)))
 }

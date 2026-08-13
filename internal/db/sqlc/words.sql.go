@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countWords = `-- name: CountWords :one
+SELECT count(*) FROM words WHERE language_id = $1
+`
+
+func (q *Queries) CountWords(ctx context.Context, languageID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countWords, languageID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteWord = `-- name: DeleteWord :execrows
 DELETE FROM words
 WHERE words.id = $1
@@ -110,6 +121,48 @@ func (q *Queries) InsertWord(ctx context.Context, arg InsertWordParams) (Word, e
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listWords = `-- name: ListWords :many
+SELECT id, language_id, native_word, learning_word, article, state, created_at, updated_at FROM words
+WHERE language_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListWordsParams struct {
+	LanguageID int64 `json:"language_id"`
+	Limit      int32 `json:"limit"`
+	Offset     int32 `json:"offset"`
+}
+
+func (q *Queries) ListWords(ctx context.Context, arg ListWordsParams) ([]Word, error) {
+	rows, err := q.db.Query(ctx, listWords, arg.LanguageID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Word
+	for rows.Next() {
+		var i Word
+		if err := rows.Scan(
+			&i.ID,
+			&i.LanguageID,
+			&i.NativeWord,
+			&i.LearningWord,
+			&i.Article,
+			&i.State,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const searchWords = `-- name: SearchWords :many

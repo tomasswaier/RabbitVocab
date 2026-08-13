@@ -7,11 +7,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
-  <header class="border-b border-slate-700 px-6 py-4 flex items-center justify-between">
-    <h1 class="text-xl font-semibold">RabbitVocab</h1>
-    <button id="logout-btn" class="text-sm text-slate-400 hover:text-slate-100 transition">Log out</button>
-  </header>
-
+	<header class="border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+	  <h1 class="text-xl font-semibold">RabbitVocab</h1>
+	  <div class="flex items-center gap-4">
+	    <select id="language-select" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm"></select>
+	    <button id="logout-btn" class="text-sm text-slate-400 hover:text-slate-100 transition">Log out</button>
+	  </div>
+	</header>
   <nav class="flex gap-2 px-6 pt-4 flex-wrap">
     <button class="tab-btn" data-tab="languages">Languages</button>
     <button class="tab-btn" data-tab="words">Words</button>

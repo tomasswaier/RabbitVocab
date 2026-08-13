@@ -10,6 +10,8 @@ import (
 
 type Querier interface {
 	CountLanguagesByUser(ctx context.Context, userID int64) (int64, error)
+	CountWordForms(ctx context.Context, languageID int64) (int64, error)
+	CountWords(ctx context.Context, languageID int64) (int64, error)
 	CreateLanguage(ctx context.Context, arg CreateLanguageParams) (Language, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
@@ -25,6 +27,8 @@ type Querier interface {
 	InsertWord(ctx context.Context, arg InsertWordParams) (Word, error)
 	InsertWordForm(ctx context.Context, arg InsertWordFormParams) (WordForm, error)
 	ListLanguagesByUser(ctx context.Context, userID int64) ([]Language, error)
+	ListWordForms(ctx context.Context, arg ListWordFormsParams) ([]ListWordFormsRow, error)
+	ListWords(ctx context.Context, arg ListWordsParams) ([]Word, error)
 	SearchWords(ctx context.Context, arg SearchWordsParams) ([]Word, error)
 	UpdateUserAPIKeyHash(ctx context.Context, arg UpdateUserAPIKeyHashParams) (User, error)
 	UpdateWordState(ctx context.Context, arg UpdateWordStateParams) (Word, error)

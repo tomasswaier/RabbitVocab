@@ -35,3 +35,15 @@ WHERE word_forms.id = $1
     JOIN languages l ON l.id = w.language_id
     WHERE l.user_id = $2
   );
+-- name: ListWordForms :many
+SELECT wf.id, wf.word_id, wf.subject, wf.form, wf.tense, wf.created_at
+FROM word_forms wf
+JOIN words w ON w.id = wf.word_id
+WHERE w.language_id = $1
+ORDER BY wf.created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountWordForms :one
+SELECT count(*) FROM word_forms wf
+JOIN words w ON w.id = wf.word_id
+WHERE w.language_id = $1;

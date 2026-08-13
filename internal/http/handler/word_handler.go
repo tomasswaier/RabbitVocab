@@ -172,3 +172,42 @@ func (h *WordHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+func (h *WordHandler) List(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	page, pageSize := parsePagination(r)
+
+	var languageID *int64
+	if v := r.URL.Query().Get("languageId"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			http.Error(w, "languageId must be an integer", http.StatusBadRequest)
+			return
+		}
+		languageID = &id
+	}
+
+	result, err := h.words.ListWords(r.Context(), userID, languageID, page, pageSize)
+	if err != nil {
+		handleWordServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func parsePagination(r *http.Request) (page, pageSize int) {
+	page = 1
+	pageSize = 20
+	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && v > 0 {
+		page = v
+	}
+	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err == nil && v > 0 && v <= 100 {
+		pageSize = v
+	}
+	return
+}

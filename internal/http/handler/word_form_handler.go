@@ -114,3 +114,30 @@ func handleWordFormServiceError(w http.ResponseWriter, err error) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }
+func (h *WordFormHandler) List(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	page, pageSize := parsePagination(r)
+
+	var languageID *int64
+	if v := r.URL.Query().Get("languageId"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			http.Error(w, "languageId must be an integer", http.StatusBadRequest)
+			return
+		}
+		languageID = &id
+	}
+
+	result, err := h.wordForms.ListWordForms(r.Context(), userID, languageID, page, pageSize)
+	if err != nil {
+		handleWordFormServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}

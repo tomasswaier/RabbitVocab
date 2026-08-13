@@ -11,6 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countWordForms = `-- name: CountWordForms :one
+SELECT count(*) FROM word_forms wf
+JOIN words w ON w.id = wf.word_id
+WHERE w.language_id = $1
+`
+
+func (q *Queries) CountWordForms(ctx context.Context, languageID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countWordForms, languageID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteWordForm = `-- name: DeleteWordForm :execrows
 DELETE FROM word_forms
 WHERE word_forms.id = $1
@@ -136,4 +149,55 @@ func (q *Queries) InsertWordForm(ctx context.Context, arg InsertWordFormParams) 
 		&i.Tense,
 	)
 	return i, err
+}
+
+const listWordForms = `-- name: ListWordForms :many
+SELECT wf.id, wf.word_id, wf.subject, wf.form, wf.tense, wf.created_at
+FROM word_forms wf
+JOIN words w ON w.id = wf.word_id
+WHERE w.language_id = $1
+ORDER BY wf.created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListWordFormsParams struct {
+	LanguageID int64 `json:"language_id"`
+	Limit      int32 `json:"limit"`
+	Offset     int32 `json:"offset"`
+}
+
+type ListWordFormsRow struct {
+	ID        int64              `json:"id"`
+	WordID    int64              `json:"word_id"`
+	Subject   string             `json:"subject"`
+	Form      string             `json:"form"`
+	Tense     pgtype.Text        `json:"tense"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListWordForms(ctx context.Context, arg ListWordFormsParams) ([]ListWordFormsRow, error) {
+	rows, err := q.db.Query(ctx, listWordForms, arg.LanguageID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWordFormsRow
+	for rows.Next() {
+		var i ListWordFormsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WordID,
+			&i.Subject,
+			&i.Form,
+			&i.Tense,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -31,3 +31,12 @@ LIMIT 20;
 DELETE FROM words
 WHERE words.id = $1
   AND language_id IN (SELECT id FROM languages WHERE user_id = $2);
+
+-- name: ListWords :many
+SELECT * FROM words
+WHERE language_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountWords :one
+SELECT count(*) FROM words WHERE language_id = $1;

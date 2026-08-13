@@ -21,6 +21,13 @@ func NewService(words Repository, languages language.Repository) *Service {
 	return &Service{words: words, languages: languages}
 }
 
+type Page[T any] struct {
+	Items    []T   `json:"items"`
+	Page     int   `json:"page"`
+	PageSize int   `json:"pageSize"`
+	Total    int64 `json:"total"`
+}
+
 // resolveLanguageID returns languageID if provided, otherwise resolves it
 // from the user's languages, requiring exactly one to exist.
 func (s *Service) resolveLanguageID(ctx context.Context, userID int64, languageID *int64) (int64, error) {
@@ -81,4 +88,23 @@ func (s *Service) DeleteWord(ctx context.Context, userID, wordID int64) error {
 		return ErrNotFoundOrForbidden
 	}
 	return nil
+}
+
+func (s *Service) ListWords(ctx context.Context, userID int64, languageID *int64, page, pageSize int) (*Page[*Word], error) {
+	resolvedID, err := s.resolveLanguageID(ctx, userID, languageID)
+	if err != nil {
+		return nil, err
+	}
+
+	offset := (page - 1) * pageSize
+	items, err := s.words.List(ctx, resolvedID, int32(pageSize), int32(offset))
+	if err != nil {
+		return nil, err
+	}
+	total, err := s.words.Count(ctx, resolvedID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Page[*Word]{Items: items, Page: page, PageSize: pageSize, Total: total}, nil
 }

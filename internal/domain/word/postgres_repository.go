@@ -78,6 +78,25 @@ func (r *PostgresRepository) Delete(ctx context.Context, wordID, userID int64) (
 	}
 	return rows > 0, nil
 }
+func (r *PostgresRepository) List(ctx context.Context, languageID int64, limit, offset int32) ([]*Word, error) {
+	rows, err := r.q.ListWords(ctx, sqlc.ListWordsParams{
+		LanguageID: languageID,
+		Limit:      limit,
+		Offset:     offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Word, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toEntity(row))
+	}
+	return out, nil
+}
+
+func (r *PostgresRepository) Count(ctx context.Context, languageID int64) (int64, error) {
+	return r.q.CountWords(ctx, languageID)
+}
 
 func toEntity(row sqlc.Word) *Word {
 	return &Word{

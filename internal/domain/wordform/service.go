@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/tomasswaier/RabbitVocab/internal/domain/language"
+	"github.com/tomasswaier/RabbitVocab/internal/domain/word"
 )
 
 var (
@@ -63,4 +64,22 @@ func (s *Service) DeleteWordForm(ctx context.Context, userID, wordFormID int64) 
 		return ErrNotFoundOrForbidden
 	}
 	return nil
+}
+func (s *Service) ListWordForms(ctx context.Context, userID int64, languageID *int64, page, pageSize int) (*word.Page[*WordForm], error) {
+	resolvedID, err := s.resolveLanguageID(ctx, userID, languageID)
+	if err != nil {
+		return nil, err
+	}
+
+	offset := (page - 1) * pageSize
+	items, err := s.wordForms.List(ctx, resolvedID, int32(pageSize), int32(offset))
+	if err != nil {
+		return nil, err
+	}
+	total, err := s.wordForms.Count(ctx, resolvedID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &word.Page[*WordForm]{Items: items, Page: page, PageSize: pageSize, Total: total}, nil
 }

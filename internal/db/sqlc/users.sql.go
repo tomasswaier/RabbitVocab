@@ -10,50 +10,30 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (username, password_hash, api_key_hash)
-VALUES ($1, $2, $3)
-RETURNING id, username, password_hash, api_key_hash, created_at
+INSERT INTO users (username, password_hash)
+VALUES ($1, $2)
+RETURNING id, username, password_hash, created_at
 `
 
 type CreateUserParams struct {
 	Username     string `json:"username"`
 	PasswordHash string `json:"password_hash"`
-	ApiKeyHash   string `json:"api_key_hash"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.Username, arg.PasswordHash, arg.ApiKeyHash)
+	row := q.db.QueryRow(ctx, createUser, arg.Username, arg.PasswordHash)
 	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
 		&i.PasswordHash,
-		&i.ApiKeyHash,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const getUserByAPIKeyHash = `-- name: GetUserByAPIKeyHash :one
-SELECT id, username, password_hash, api_key_hash, created_at FROM users
-WHERE api_key_hash = $1
-`
-
-func (q *Queries) GetUserByAPIKeyHash(ctx context.Context, apiKeyHash string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByAPIKeyHash, apiKeyHash)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Username,
-		&i.PasswordHash,
-		&i.ApiKeyHash,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, api_key_hash, created_at FROM users
+SELECT id, username, password_hash, created_at FROM users
 WHERE username = $1
 `
 
@@ -64,32 +44,6 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.ID,
 		&i.Username,
 		&i.PasswordHash,
-		&i.ApiKeyHash,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const updateUserAPIKeyHash = `-- name: UpdateUserAPIKeyHash :one
-UPDATE users
-SET api_key_hash = $2
-WHERE id = $1
-RETURNING id, username, password_hash, api_key_hash, created_at
-`
-
-type UpdateUserAPIKeyHashParams struct {
-	ID         int64  `json:"id"`
-	ApiKeyHash string `json:"api_key_hash"`
-}
-
-func (q *Queries) UpdateUserAPIKeyHash(ctx context.Context, arg UpdateUserAPIKeyHashParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserAPIKeyHash, arg.ID, arg.ApiKeyHash)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Username,
-		&i.PasswordHash,
-		&i.ApiKeyHash,
 		&i.CreatedAt,
 	)
 	return i, err

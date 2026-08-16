@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/tomasswaier/RabbitVocab/internal/apikey"
+	domainapikey "github.com/tomasswaier/RabbitVocab/internal/domain/apikey"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/language"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/session"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/user"
@@ -17,11 +18,12 @@ import (
 type AuthHandler struct {
 	users     user.Repository
 	languages language.Repository
+	apiKeys   domainapikey.Repository
 	sessions  *session.Service
 }
 
-func NewAuthHandler(users user.Repository, languages language.Repository, sessions *session.Service) *AuthHandler {
-	return &AuthHandler{users: users, languages: languages, sessions: sessions}
+func NewAuthHandler(users user.Repository, languages language.Repository, apiKeys domainapikey.Repository, sessions *session.Service) *AuthHandler {
+	return &AuthHandler{users: users, languages: languages, apiKeys: apiKeys, sessions: sessions}
 }
 
 type registerRequest struct {
@@ -52,13 +54,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rawKey, err := apikey.Generate()
-	if err != nil {
-		http.Error(w, "failed to generate api key", http.StatusInternalServerError)
-		return
-	}
-
-	u, err := h.users.Create(r.Context(), req.Username, string(passwordHash), apikey.Hash(rawKey))
+	u, err := h.users.Create(r.Context(), req.Username, string(passwordHash))
 	if err != nil {
 		http.Error(w, "failed to create user (username may already exist)", http.StatusConflict)
 		return
@@ -71,19 +67,40 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rawKey, err := apikey.Generate()
+	if err != nil {
+		http.Error(w, "failed to generate api key", http.StatusInternalServerError)
+		return
+	}
+
+	label := "default"
+	if _, err := h.apiKeys.Create(r.Context(), u.ID, apikey.Hash(rawKey), &label, nil, nil); err != nil {
+		http.Error(w, "user created but failed to create api key", http.StatusInternalServerError)
+		return
+	}
+
 	writeJSON(w, http.StatusCreated, registerResponse{UserID: u.ID, APIKey: rawKey})
 }
 
-type regenerateKeyResponse struct {
+type createAPIKeyRequest struct {
+	Label string `json:"label,omitempty"`
+}
+
+type createAPIKeyResponse struct {
 	APIKey string `json:"apiKey"`
 }
 
-func (h *AuthHandler) RegenerateKey(w http.ResponseWriter, r *http.Request) {
+// CreateAPIKey issues a new, additional API key for the authenticated user.
+// Unlike the old design, this does NOT invalidate any existing keys.
+func (h *AuthHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+
+	var req createAPIKeyRequest
+	_ = json.NewDecoder(r.Body).Decode(&req) // body is optional
 
 	rawKey, err := apikey.Generate()
 	if err != nil {
@@ -91,12 +108,17 @@ func (h *AuthHandler) RegenerateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.users.UpdateAPIKeyHash(r.Context(), userID, apikey.Hash(rawKey)); err != nil {
-		http.Error(w, "failed to update api key", http.StatusInternalServerError)
+	var label *string
+	if req.Label != "" {
+		label = &req.Label
+	}
+
+	if _, err := h.apiKeys.Create(r.Context(), userID, apikey.Hash(rawKey), label, nil, nil); err != nil {
+		http.Error(w, "failed to create api key", http.StatusInternalServerError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, regenerateKeyResponse{APIKey: rawKey})
+	writeJSON(w, http.StatusCreated, createAPIKeyResponse{APIKey: rawKey})
 }
 
 type loginRequest struct {
@@ -135,7 +157,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
-		// Secure: true, // enable once served over HTTPS
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

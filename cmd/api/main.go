@@ -13,7 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/tomasswaier/RabbitVocab/internal/db/sqlc"
+	apikeydomain "github.com/tomasswaier/RabbitVocab/internal/domain/apikey"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/language"
+	"github.com/tomasswaier/RabbitVocab/internal/domain/oauth"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/session"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/user"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/word"
@@ -58,17 +60,21 @@ func run() error {
 	wordFormService := wordform.NewService(wordFormRepo, languageRepo)
 	sessionRepo := session.NewPostgresRepository(queries)
 	sessionService := session.NewService(sessionRepo)
+	apiKeyRepo := apikeydomain.NewPostgresRepository(queries)
+	oauthRepo := oauth.NewPostgresRepository(queries)
+	publicBaseURL := getEnv("PUBLIC_BASE_URL", "http://localhost:8080")
 
 	handlers := vocabhttp.Handlers{
-		Auth:     handler.NewAuthHandler(userRepo, languageRepo, sessionService),
+		Auth:     handler.NewAuthHandler(userRepo, languageRepo, apiKeyRepo, sessionService),
 		Language: handler.NewLanguageHandler(languageRepo),
 		Word:     handler.NewWordHandler(wordService),
 		WordForm: handler.NewWordFormHandler(wordFormService),
+		OAuth:    handler.NewOAuthHandler(oauthRepo, apiKeyRepo, userRepo, publicBaseURL),
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthzHandler(pool))
-	vocabhttp.RegisterRoutes(mux, handlers, userRepo, sessionService)
+	vocabhttp.RegisterRoutes(mux, handlers, apiKeyRepo, sessionService)
 	mux.Handle("GET /", http.FileServer(http.Dir(webDir)))
 	srv := &http.Server{
 		Addr:              ":" + port,

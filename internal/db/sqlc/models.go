@@ -55,10 +55,47 @@ func (ns NullWordState) Value() (driver.Value, error) {
 	return string(ns.WordState), nil
 }
 
+type ApiKey struct {
+	ID        int64              `json:"id"`
+	UserID    int64              `json:"user_id"`
+	KeyHash   string             `json:"key_hash"`
+	Label     pgtype.Text        `json:"label"`
+	ClientID  pgtype.Text        `json:"client_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Language struct {
 	ID        int64              `json:"id"`
 	UserID    int64              `json:"user_id"`
 	Name      string             `json:"name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type OauthAuthorizationCode struct {
+	CodeHash            string             `json:"code_hash"`
+	ClientID            string             `json:"client_id"`
+	UserID              int64              `json:"user_id"`
+	RedirectUri         string             `json:"redirect_uri"`
+	CodeChallenge       string             `json:"code_challenge"`
+	CodeChallengeMethod string             `json:"code_challenge_method"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type OauthClient struct {
+	ClientID     string             `json:"client_id"`
+	ClientName   pgtype.Text        `json:"client_name"`
+	RedirectUris []string           `json:"redirect_uris"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type OauthRefreshToken struct {
+	TokenHash string             `json:"token_hash"`
+	ApiKeyID  int64              `json:"api_key_id"`
+	UserID    int64              `json:"user_id"`
+	ClientID  string             `json:"client_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -74,7 +111,6 @@ type User struct {
 	ID           int64              `json:"id"`
 	Username     string             `json:"username"`
 	PasswordHash string             `json:"password_hash"`
-	ApiKeyHash   string             `json:"api_key_hash"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 

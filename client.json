@@ -1,0 +1,1 @@
+{"client_id":"37b3158249d939b0fd253762021532f905684d1060cd66d5ac77820d8638c535","client_id_issued_at":1786786156,"client_name":"test-client","grant_types":["authorization_code","refresh_token"],"redirect_uris":["http://localhost:9999/callback"],"response_types":["code"],"token_endpoint_auth_method":"none"}

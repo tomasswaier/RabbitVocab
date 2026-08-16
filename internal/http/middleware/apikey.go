@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/tomasswaier/RabbitVocab/internal/apikey"
+	domainapikey "github.com/tomasswaier/RabbitVocab/internal/domain/apikey"
 	"github.com/tomasswaier/RabbitVocab/internal/domain/session"
-	"github.com/tomasswaier/RabbitVocab/internal/domain/user"
 )
 
 type contextKey string
@@ -20,14 +20,21 @@ func UserIDFromContext(ctx context.Context) (int64, bool) {
 	return id, ok
 }
 
-// Authenticate accepts either an X-API-Key header or a session cookie,
-// resolving both to the same userID context value. API keys and sessions
-// are fully independent — logging in never touches the API key.
-func Authenticate(users user.Repository, sessions *session.Service) func(http.Handler) http.Handler {
+// Authenticate accepts either an X-API-Key/Bearer token (matched against the
+// api_keys table, covering both manually-issued keys and OAuth access
+// tokens) or a session cookie. Both resolve to the same userID context value.
+func Authenticate(apiKeys domainapikey.Repository, sessions *session.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if rawKey := r.Header.Get("X-API-Key"); rawKey != "" {
-				u, err := users.GetByAPIKeyHash(r.Context(), apikey.Hash(rawKey))
+			rawKey := r.Header.Get("X-API-Key")
+			if rawKey == "" {
+				if auth := r.Header.Get("Authorization"); len(auth) > 7 && auth[:7] == "Bearer " {
+					rawKey = auth[7:]
+				}
+			}
+
+			if rawKey != "" {
+				u, err := apiKeys.GetUserByHash(r.Context(), apikey.Hash(rawKey))
 				if err == nil {
 					ctx := context.WithValue(r.Context(), userIDKey, u.ID)
 					next.ServeHTTP(w, r.WithContext(ctx))

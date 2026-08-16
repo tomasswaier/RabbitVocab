@@ -27,6 +27,7 @@ go.work.sum
 # env file
 .env
 .plan
+main.go
 
 # Editor/IDE
 # .idea/

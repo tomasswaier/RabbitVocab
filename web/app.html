@@ -10,6 +10,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
+	<div id="offline-banner" class="hidden bg-amber-900 text-amber-200 text-sm text-center py-2">
+	  You're offline — only testing is available. Add words/languages once you're back online.
+	</div>
 	<header class="border-b border-slate-700 px-6 py-4 flex items-center justify-between">
 	  <h1 class="text-xl font-semibold">RabbitVocab</h1>
 	  <div class="flex items-center gap-4">
@@ -17,14 +20,13 @@
 	    <button id="logout-btn" class="text-sm text-slate-400 hover:text-slate-100 transition">Log out</button>
 	  </div>
 	</header>
-  <nav class="flex gap-2 px-6 pt-4 flex-wrap">
-    <button class="tab-btn" data-tab="languages">Languages</button>
-    <button class="tab-btn" data-tab="words">Words</button>
-    <button class="tab-btn" data-tab="verbforms">Verb Forms</button>
-    <button class="tab-btn" data-tab="testwords">Test Words</button>
-    <button class="tab-btn" data-tab="testverbs">Test Verbs</button>
-  </nav>
-
+	<nav class="flex gap-2 px-6 pt-4 flex-wrap">
+	  <button class="tab-btn online-only-tab" data-tab="languages">Languages</button>
+	  <button class="tab-btn online-only-tab" data-tab="words">Words</button>
+	  <button class="tab-btn online-only-tab" data-tab="verbforms">Verb Forms</button>
+	  <button class="tab-btn" data-tab="testwords">Test Words</button>
+	  <button class="tab-btn" data-tab="testverbs">Test Verbs</button>
+	</nav>
   <main class="p-6 max-w-2xl">
     <section id="tab-languages" class="tab-panel space-y-6"></section>
     <section id="tab-words" class="tab-panel space-y-6 hidden"></section>
@@ -46,8 +48,9 @@
     .tab-btn.active { background: rgb(79 70 229); color: white; }
   </style>
 
-  <script src="/js/api.js"></script>
-  <script src="/js/app.js"></script>
+	<script src="/js/api.js"></script>
+	<script src="/js/db.js"></script>
+	<script src="/js/app.js"></script>
 	<script>
 	  if ('serviceWorker' in navigator) {
 	    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));

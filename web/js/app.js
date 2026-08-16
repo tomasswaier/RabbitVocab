@@ -52,6 +52,26 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   await apiFetch('/auth/logout', { method: 'POST' });
   window.location.href = '/index.html';
 });
+// ---------- Online/offline UI gating ----------
+
+function updateOnlineUI() {
+  const online = navigator.onLine;
+
+  document.querySelectorAll('.online-only-tab').forEach((btn) => {
+    btn.classList.toggle('hidden', !online);
+  });
+
+  const banner = document.getElementById('offline-banner');
+  if (banner) banner.classList.toggle('hidden', online);
+
+  // Bounce off a now-unavailable tab if we just went offline.
+  if (!online && ['languages', 'words', 'verbforms'].includes(currentTab)) {
+    showTab('testwords');
+  }
+}
+
+window.addEventListener('online', updateOnlineUI);
+window.addEventListener('offline', updateOnlineUI);
 
 // ---------- Word state ordering (for the "level up" chance in testing views) ----------
 
@@ -514,5 +534,6 @@ const renderers = {
 
 (async () => {
   await initLanguageSelector();
+  updateOnlineUI();
   showTab('languages');
 })();

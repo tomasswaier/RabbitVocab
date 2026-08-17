@@ -70,6 +70,7 @@ func (r *PostgresRepository) GetRandom(ctx context.Context, languageID int64, co
 	}
 	return out, nil
 }
+
 func (r *PostgresRepository) List(ctx context.Context, languageID int64, limit, offset int32) ([]*WordForm, error) {
 	rows, err := r.q.ListWordForms(ctx, sqlc.ListWordFormsParams{
 		LanguageID: languageID,
@@ -82,17 +83,18 @@ func (r *PostgresRepository) List(ctx context.Context, languageID int64, limit, 
 	out := make([]*WordForm, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, &WordForm{
-			ID:        row.ID,
-			WordID:    row.WordID,
-			Subject:   row.Subject,
-			Form:      row.Form,
-			Tense:     pgtypeconv.PtrFromText(row.Tense),
-			CreatedAt: row.CreatedAt.Time,
+			ID:         row.ID,
+			WordID:     row.WordID,
+			Subject:    row.Subject,
+			Form:       row.Form,
+			Tense:      pgtypeconv.PtrFromText(row.Tense),
+			State:      string(row.State),
+			NativeWord: row.NativeWord,
+			CreatedAt:  row.CreatedAt.Time,
 		})
 	}
 	return out, nil
 }
-
 func (r *PostgresRepository) Count(ctx context.Context, languageID int64) (int64, error) {
 	return r.q.CountWordForms(ctx, languageID)
 }

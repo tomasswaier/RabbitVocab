@@ -36,7 +36,7 @@ WHERE word_forms.id = $1
     WHERE l.user_id = $2
   );
 -- name: ListWordForms :many
-SELECT wf.id, wf.word_id, wf.subject, wf.form, wf.tense, wf.created_at
+SELECT wf.id, wf.word_id, wf.subject, wf.form, wf.tense, wf.created_at, w.state, w.native_word
 FROM word_forms wf
 JOIN words w ON w.id = wf.word_id
 WHERE w.language_id = $1

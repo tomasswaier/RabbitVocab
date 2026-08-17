@@ -58,6 +58,52 @@ async function loadTestBatch(type, languageId) {
   });
 }
 
+// ---------- Full offline mirror (all words/forms, for client-side random selection) ----------
+
+async function saveFullMirror(type, languageId, items) {
+  const key = `${type}-full:${languageId}`;
+  await withStore('testBatches', 'readwrite', (store) => {
+    store.put({ key, items, savedAt: Date.now() });
+  });
+}
+
+async function loadFullMirror(type, languageId) {
+  const key = `${type}-full:${languageId}`;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('testBatches', 'readonly');
+    const req = tx.objectStore('testBatches').get(key);
+    req.onsuccess = () => resolve(req.result ? req.result.items : null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ---------- Full local dataset (synced on every load, not just last batch) ----------
+// Stored under the same `testBatches` store, keyed distinctly from the old
+// per-request batch cache, so the whole known word/word-form set for a
+// language is available for client-side random selection at any time,
+// online or offline.
+
+async function saveFullWordSet(languageId, words) {
+  await withStore('testBatches', 'readwrite', (store) => {
+    store.put({ key: `words-full:${languageId}`, items: words, savedAt: Date.now() });
+  });
+}
+
+async function loadFullWordSet(languageId) {
+  return loadTestBatch('words-full', languageId);
+}
+
+async function saveFullWordFormSet(languageId, forms) {
+  await withStore('testBatches', 'readwrite', (store) => {
+    store.put({ key: `verbs-full:${languageId}`, items: forms, savedAt: Date.now() });
+  });
+}
+
+async function loadFullWordFormSet(languageId) {
+  return loadTestBatch('verbs-full', languageId);
+}
+
 // ---------- Sync queue (pending word-state updates) ----------
 
 async function queueStateUpdate(wordId, state) {

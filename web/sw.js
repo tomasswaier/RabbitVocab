@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rabbitvocab-shell-v1';
+const CACHE_NAME = 'rabbitvocab-shell-v2';
 
 const SHELL_FILES = [
   '/index.html',
@@ -46,14 +46,18 @@ self.addEventListener('fetch', (event) => {
 
   if (!isShellFile) return;
 
+  // Network-first: always try to get the latest shell file when online
+  // (and refresh the cache), only falling back to the cached copy when
+  // there's genuinely no connection. This avoids serving stale JS/HTML
+  // after deploys, at the small cost of one network round-trip per file
+  // when online.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
+    fetch(event.request)
+      .then((response) => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });

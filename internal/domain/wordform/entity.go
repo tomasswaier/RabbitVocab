@@ -8,6 +8,7 @@ type WordForm struct {
 	Subject      string
 	Form         string
 	Tense        *string
+	State        string
 	NativeWord   string
 	LearningWord string
 	CreatedAt    time.Time

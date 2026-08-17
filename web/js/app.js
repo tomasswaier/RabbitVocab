@@ -13,7 +13,13 @@ function setSelectedLanguageId(id) {
 
 async function initLanguageSelector() {
   const select = document.getElementById('language-select');
-  const langs = (await apiFetch('/languages')) || [];
+
+  let langs = [];
+  try {
+    langs = (await withTimeout(apiFetch('/languages'), 4000)) || [];
+  } catch (err) {
+    return; // offline or unreachable — selector keeps whatever was last stored
+  }
 
   if (langs.length === 0) {
     select.innerHTML = '<option value="">No languages yet</option>';
@@ -29,8 +35,85 @@ async function initLanguageSelector() {
 
   select.addEventListener('change', () => {
     setSelectedLanguageId(Number(select.value));
+    syncAllData(getSelectedLanguageId());
     renderers[currentTab]?.();
   });
+}
+
+// ---------- Full dataset sync (runs on every load, language switch, and reconnect) ----------
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
+async function fetchAllPages(basePath, languageId) {
+  const pageSize = 100;
+  let page = 1;
+  let all = [];
+
+  while (true) {
+    const result = await withTimeout(
+      apiFetch(`${basePath}?page=${page}&pageSize=${pageSize}&languageId=${languageId}`),
+      6000
+    );
+    if (!result || !result.items) break;
+    all = all.concat(result.items);
+    const totalPages = Math.max(1, Math.ceil((result.total || 0) / pageSize));
+    if (page >= totalPages) break;
+    page++;
+  }
+
+  return all;
+}
+
+// Pulls the FULL word and word-form set for a language into IndexedDB.
+// This is what makes offline testing correct — testing always selects from
+// this complete local set, never from whatever a single /random call
+// happened to return last.
+async function syncAllData(languageId) {
+  if (!languageId || !navigator.onLine) return;
+
+  try {
+    const words = await fetchAllPages('/words', languageId);
+    await saveFullWordSet(languageId, words);
+  } catch (err) {
+    console.error('word sync failed', err);
+  }
+
+  try {
+    const forms = await fetchAllPages('/word-forms', languageId);
+    await saveFullWordFormSet(languageId, forms);
+  } catch (err) {
+    console.error('word form sync failed', err);
+  }
+}
+
+// ---------- Client-side weighted random selection (mirrors backend logic) ----------
+// Excludes mastered items; weights new/learning/confident so less-known
+// items surface more often. Runs entirely client-side so it works
+// identically online or offline.
+
+const STATE_WEIGHT = { new: 4, learning: 3, confident: 2 };
+
+function weightedSample(items, count) {
+  const pool = items.filter((i) => i.State !== 'mastered');
+  const picked = [];
+
+  while (pool.length && picked.length < count) {
+    const totalWeight = pool.reduce((sum, i) => sum + (STATE_WEIGHT[i.State] || 1), 0);
+    let r = Math.random() * totalWeight;
+    let idx = 0;
+    for (; idx < pool.length - 1; idx++) {
+      r -= STATE_WEIGHT[pool[idx].State] || 1;
+      if (r <= 0) break;
+    }
+    picked.push(pool.splice(idx, 1)[0]);
+  }
+
+  return picked;
 }
 
 // ---------- Tab switching ----------
@@ -52,6 +135,7 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   await apiFetch('/auth/logout', { method: 'POST' });
   window.location.href = '/index.html';
 });
+
 // ---------- Online/offline UI gating ----------
 
 function updateOnlineUI() {
@@ -64,14 +148,36 @@ function updateOnlineUI() {
   const banner = document.getElementById('offline-banner');
   if (banner) banner.classList.toggle('hidden', online);
 
-  // Bounce off a now-unavailable tab if we just went offline.
   if (!online && ['languages', 'words', 'verbforms'].includes(currentTab)) {
     showTab('testwords');
   }
 }
 
-window.addEventListener('online', updateOnlineUI);
+window.addEventListener('online', () => {
+  updateOnlineUI();
+  flushSyncQueue();
+  syncAllData(getSelectedLanguageId());
+});
 window.addEventListener('offline', updateOnlineUI);
+
+// ---------- Sync queue (pending level-ups made while offline) ----------
+
+async function flushSyncQueue() {
+  if (!navigator.onLine) return;
+
+  const queued = await getQueuedUpdates();
+  for (const item of queued) {
+    try {
+      await apiFetch(`/words/${item.wordId}/state`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: item.state }),
+      });
+      await deleteQueuedUpdate(item.id);
+    } catch (err) {
+      break; // retry the rest on the next 'online' event
+    }
+  }
+}
 
 // ---------- Word state ordering (for the "level up" chance in testing views) ----------
 
@@ -90,17 +196,27 @@ function nextState(current) {
   return STATE_ORDER[idx + 1];
 }
 
-// Chance (1 in N) that a correct answer bumps the word's knowledge level.
 const LEVEL_UP_CHANCE = 15;
 
 async function maybeLevelUp(wordId, currentState) {
   if (Math.random() >= 1 / LEVEL_UP_CHANCE) return false;
   const next = nextState(currentState);
   if (!next) return false;
-  await apiFetch(`/words/${wordId}/state`, {
-    method: 'PATCH',
-    body: JSON.stringify({ state: next }),
-  });
+
+  if (navigator.onLine) {
+    try {
+      await apiFetch(`/words/${wordId}/state`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: next }),
+      });
+      return true;
+    } catch (err) {
+      await queueStateUpdate(wordId, next);
+      return true;
+    }
+  }
+
+  await queueStateUpdate(wordId, next);
   return true;
 }
 
@@ -190,6 +306,7 @@ async function renderWords() {
       e.target.reset();
       wordsPage = 1;
       loadWordsList();
+      syncAllData(languageId);
     } catch (err) {
       document.getElementById('word-result').textContent = `Error: ${err.message}`;
     }
@@ -220,6 +337,7 @@ async function loadWordsList() {
     btn.addEventListener('click', async () => {
       await apiFetch(`/words/${btn.dataset.deleteWord}`, { method: 'DELETE' });
       loadWordsList();
+      syncAllData(languageId);
     });
   });
 
@@ -296,6 +414,7 @@ async function renderVerbForms() {
     const subject = document.getElementById('subject').value.trim();
     const form = document.getElementById('form-value').value.trim();
     const tense = document.getElementById('tense').value.trim();
+    const languageId = getSelectedLanguageId();
 
     const body = { wordId, subject, form };
     if (tense) body.tense = tense;
@@ -306,6 +425,7 @@ async function renderVerbForms() {
       e.target.reset();
       formsPage = 1;
       loadFormsList();
+      syncAllData(languageId);
     } catch (err) {
       document.getElementById('form-result').textContent = `Error: ${err.message}`;
     }
@@ -336,6 +456,7 @@ async function loadFormsList() {
     btn.addEventListener('click', async () => {
       await apiFetch(`/word-forms/${btn.dataset.deleteForm}`, { method: 'DELETE' });
       loadFormsList();
+      syncAllData(languageId);
     });
   });
 
@@ -361,7 +482,6 @@ function formRow(wf) {
 // ---------- Test Words tab ----------
 
 let wordQueue = [];
-let wordQueueIdx = 0;
 
 async function renderTestWords() {
   const el = document.getElementById('tab-testwords');
@@ -383,39 +503,68 @@ async function renderTestWords() {
     const count = Number(document.getElementById('word-count').value) || 10;
     const languageId = getSelectedLanguageId();
     if (!languageId) return;
-    wordQueue = (await apiFetch(`/words/random?count=${count}&languageId=${languageId}`)) || [];
-    wordQueueIdx = 0;
+
+    const quizEl = document.getElementById('word-quiz');
+    quizEl.innerHTML = '<p class="text-slate-400">Loading…</p>';
+
+    if (navigator.onLine) {
+      try {
+        await withTimeout(syncAllData(languageId), 5000);
+      } catch (err) {
+        // best-effort refresh; fall through to whatever's already cached
+      }
+    }
+
+    const allWords = (await loadFullWordSet(languageId)) || [];
+    if (allWords.length === 0) {
+      quizEl.innerHTML = '<p class="text-slate-400">No words available yet. Connect to the internet at least once to download your words for offline testing.</p>';
+      return;
+    }
+
+    wordQueue = weightedSample(allWords, count);
+    if (wordQueue.length === 0) {
+      quizEl.innerHTML = '<p class="text-slate-400">All your words are already mastered — nothing to test.</p>';
+      return;
+    }
+
     showWordQuizItem();
   });
 }
 
 function showWordQuizItem() {
   const quizEl = document.getElementById('word-quiz');
-  if (wordQueueIdx >= wordQueue.length) {
+  if (wordQueue.length === 0) {
     quizEl.innerHTML = `<p class="text-slate-400">Done — no more words in this session.</p>`;
     return;
   }
 
-  const w = wordQueue[wordQueueIdx];
+  const w = wordQueue[0];
+  const articleField = w.Article
+    ? `
+      <label class="block text-sm mb-1 text-slate-300">Article</label>
+      <input id="answer-article" class="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 mb-3" />
+    `
+    : '';
+
   quizEl.innerHTML = `
     <div class="bg-slate-800 rounded-xl p-6 max-w-sm">
       <p class="text-sm text-slate-400 mb-1">Translate</p>
       <p class="text-2xl font-semibold mb-4">${escapeHtml(w.NativeWord)}</p>
 
-      <label class="block text-sm mb-1 text-slate-300">Translation</label>
-      <input id="answer-word" class="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 mb-3" />
+      ${articleField}
 
-      <label class="block text-sm mb-1 text-slate-300">Article (if any)</label>
-      <input id="answer-article" class="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 mb-4" />
+      <label class="block text-sm mb-1 text-slate-300">Translation</label>
+      <input id="answer-word" class="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 mb-4" />
 
       <button id="check-word-btn" class="bg-indigo-600 hover:bg-indigo-500 transition rounded-lg px-4 py-2">Check</button>
       <p id="word-feedback" class="mt-3 text-sm"></p>
+      <p class="mt-2 text-xs text-slate-500">${wordQueue.length} word${wordQueue.length === 1 ? '' : 's'} left</p>
     </div>
   `;
 
   document.getElementById('check-word-btn').addEventListener('click', async () => {
     const answer = document.getElementById('answer-word').value.trim();
-    const articleAnswer = document.getElementById('answer-article').value.trim();
+    const articleAnswer = w.Article ? document.getElementById('answer-article').value.trim() : '';
     const feedback = document.getElementById('word-feedback');
 
     const correctWord = normalize(answer) === normalize(w.LearningWord);
@@ -425,22 +574,20 @@ function showWordQuizItem() {
       const leveledUp = await maybeLevelUp(w.ID, w.State);
       feedback.className = 'mt-3 text-sm text-emerald-400';
       feedback.textContent = leveledUp ? 'Correct! Knowledge level increased.' : 'Correct!';
+      wordQueue.shift();
     } else {
       feedback.className = 'mt-3 text-sm text-red-400';
-      feedback.textContent = `Not quite. Correct answer: ${w.Article ? w.Article + ' ' : ''}${w.LearningWord}`;
+      feedback.textContent = `Not quite. Correct answer: ${w.Article ? w.Article + ' ' : ''}${w.LearningWord}. You'll see this word again.`;
+      wordQueue.push(wordQueue.shift());
     }
 
-    setTimeout(() => {
-      wordQueueIdx++;
-      showWordQuizItem();
-    }, 1500);
+    setTimeout(showWordQuizItem, 1500);
   });
 }
 
 // ---------- Test Verbs tab ----------
 
 let formQueue = [];
-let formQueueIdx = 0;
 
 async function renderTestVerbs() {
   const el = document.getElementById('tab-testverbs');
@@ -462,23 +609,50 @@ async function renderTestVerbs() {
     const count = Number(document.getElementById('verb-count').value) || 10;
     const languageId = getSelectedLanguageId();
     if (!languageId) return;
-    formQueue = (await apiFetch(`/word-forms/random?count=${count}&languageId=${languageId}`)) || [];
-    formQueueIdx = 0;
+
+    const quizEl = document.getElementById('verb-quiz');
+    quizEl.innerHTML = '<p class="text-slate-400">Loading…</p>';
+
+    if (navigator.onLine) {
+      try {
+        await withTimeout(syncAllData(languageId), 5000);
+      } catch (err) {
+        // best-effort refresh; fall through to whatever's already cached
+      }
+    }
+
+    const allForms = (await loadFullWordFormSet(languageId)) || [];
+    if (allForms.length === 0) {
+      quizEl.innerHTML = '<p class="text-slate-400">No verb forms available yet. Connect to the internet at least once to download them for offline testing.</p>';
+      return;
+    }
+
+    formQueue = weightedSample(allForms, count);
+    if (formQueue.length === 0) {
+      quizEl.innerHTML = '<p class="text-slate-400">All related words are already mastered — nothing to test.</p>';
+      return;
+    }
+
     showVerbQuizItem();
   });
 }
 
 function showVerbQuizItem() {
   const quizEl = document.getElementById('verb-quiz');
-  if (formQueueIdx >= formQueue.length) {
+  if (formQueue.length === 0) {
     quizEl.innerHTML = `<p class="text-slate-400">Done — no more verb forms in this session.</p>`;
     return;
   }
 
-  const wf = formQueue[formQueueIdx];
+  const wf = formQueue[0];
+  const tenseLine = wf.Tense
+    ? `<p class="text-xs text-slate-500 mb-1">${escapeHtml(wf.Tense)}</p>`
+    : '';
+
   quizEl.innerHTML = `
     <div class="bg-slate-800 rounded-xl p-6 max-w-sm">
       <p class="text-sm text-slate-400 mb-1">${escapeHtml(wf.NativeWord)}</p>
+      ${tenseLine}
       <p class="text-2xl font-semibold mb-4">${escapeHtml(wf.Subject)}</p>
 
       <label class="block text-sm mb-1 text-slate-300">Conjugated form</label>
@@ -486,6 +660,7 @@ function showVerbQuizItem() {
 
       <button id="check-verb-btn" class="bg-indigo-600 hover:bg-indigo-500 transition rounded-lg px-4 py-2">Check</button>
       <p id="verb-feedback" class="mt-3 text-sm"></p>
+      <p class="mt-2 text-xs text-slate-500">${formQueue.length} form${formQueue.length === 1 ? '' : 's'} left</p>
     </div>
   `;
 
@@ -498,15 +673,14 @@ function showVerbQuizItem() {
     if (correct) {
       feedback.className = 'mt-3 text-sm text-emerald-400';
       feedback.textContent = 'Correct!';
+      formQueue.shift();
     } else {
       feedback.className = 'mt-3 text-sm text-red-400';
-      feedback.textContent = `Not quite. Correct answer: ${wf.Form}`;
+      feedback.textContent = `Not quite. Correct answer: ${wf.Form}. You'll see this one again.`;
+      formQueue.push(formQueue.shift());
     }
 
-    setTimeout(() => {
-      formQueueIdx++;
-      showVerbQuizItem();
-    }, 1500);
+    setTimeout(showVerbQuizItem, 1500);
   });
 }
 
@@ -535,5 +709,7 @@ const renderers = {
 (async () => {
   await initLanguageSelector();
   updateOnlineUI();
-  showTab('languages');
+  flushSyncQueue();
+  syncAllData(getSelectedLanguageId()); // refresh local dataset on every PWA load
+  showTab(navigator.onLine ? 'languages' : 'testwords');
 })();

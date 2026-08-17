@@ -152,7 +152,7 @@ func (q *Queries) InsertWordForm(ctx context.Context, arg InsertWordFormParams) 
 }
 
 const listWordForms = `-- name: ListWordForms :many
-SELECT wf.id, wf.word_id, wf.subject, wf.form, wf.tense, wf.created_at
+SELECT wf.id, wf.word_id, wf.subject, wf.form, wf.tense, wf.created_at, w.state, w.native_word
 FROM word_forms wf
 JOIN words w ON w.id = wf.word_id
 WHERE w.language_id = $1
@@ -167,12 +167,14 @@ type ListWordFormsParams struct {
 }
 
 type ListWordFormsRow struct {
-	ID        int64              `json:"id"`
-	WordID    int64              `json:"word_id"`
-	Subject   string             `json:"subject"`
-	Form      string             `json:"form"`
-	Tense     pgtype.Text        `json:"tense"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID         int64              `json:"id"`
+	WordID     int64              `json:"word_id"`
+	Subject    string             `json:"subject"`
+	Form       string             `json:"form"`
+	Tense      pgtype.Text        `json:"tense"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	State      WordState          `json:"state"`
+	NativeWord string             `json:"native_word"`
 }
 
 func (q *Queries) ListWordForms(ctx context.Context, arg ListWordFormsParams) ([]ListWordFormsRow, error) {
@@ -191,6 +193,8 @@ func (q *Queries) ListWordForms(ctx context.Context, arg ListWordFormsParams) ([
 			&i.Form,
 			&i.Tense,
 			&i.CreatedAt,
+			&i.State,
+			&i.NativeWord,
 		); err != nil {
 			return nil, err
 		}

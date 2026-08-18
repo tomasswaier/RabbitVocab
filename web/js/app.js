@@ -482,6 +482,7 @@ function formRow(wf) {
 // ---------- Test Words tab ----------
 
 let wordQueue = [];
+let lastWordError = null;
 
 async function renderTestWords() {
   const el = document.getElementById('tab-testwords');
@@ -506,6 +507,7 @@ async function renderTestWords() {
 
     const quizEl = document.getElementById('word-quiz');
     quizEl.innerHTML = '<p class="text-slate-400">Loading…</p>';
+    lastWordError = null;
 
     if (navigator.onLine) {
       try {
@@ -546,6 +548,12 @@ function showWordQuizItem() {
     `
     : '';
 
+  const errorBanner = lastWordError
+    ? `<div class="mt-4 text-sm text-red-300 bg-red-950/50 border border-red-900 rounded-lg px-3 py-2">
+         <span class="font-semibold">Last mistake:</span> ${escapeHtml(lastWordError)}
+       </div>`
+    : '';
+
   quizEl.innerHTML = `
     <div class="bg-slate-800 rounded-xl p-6 max-w-sm">
       <p class="text-sm text-slate-400 mb-1">Translate</p>
@@ -560,6 +568,7 @@ function showWordQuizItem() {
       <p id="word-feedback" class="mt-3 text-sm"></p>
       <p class="mt-2 text-xs text-slate-500">${wordQueue.length} word${wordQueue.length === 1 ? '' : 's'} left</p>
     </div>
+    ${errorBanner}
   `;
 
   document.getElementById('check-word-btn').addEventListener('click', async () => {
@@ -577,7 +586,8 @@ function showWordQuizItem() {
       wordQueue.shift();
     } else {
       feedback.className = 'mt-3 text-sm text-red-400';
-      feedback.textContent = `Not quite. Correct answer: ${w.Article ? w.Article + ' ' : ''}${w.LearningWord}. You'll see this word again.`;
+      feedback.textContent = 'Not quite — see below.';
+      lastWordError = `"${w.NativeWord}" — correct answer: ${w.Article ? w.Article + ' ' : ''}${w.LearningWord}`;
       wordQueue.push(wordQueue.shift());
     }
 
@@ -588,6 +598,7 @@ function showWordQuizItem() {
 // ---------- Test Verbs tab ----------
 
 let formQueue = [];
+let lastVerbError = null;
 
 async function renderTestVerbs() {
   const el = document.getElementById('tab-testverbs');
@@ -612,6 +623,7 @@ async function renderTestVerbs() {
 
     const quizEl = document.getElementById('verb-quiz');
     quizEl.innerHTML = '<p class="text-slate-400">Loading…</p>';
+    lastVerbError = null;
 
     if (navigator.onLine) {
       try {
@@ -649,6 +661,12 @@ function showVerbQuizItem() {
     ? `<p class="text-xs text-slate-500 mb-1">${escapeHtml(wf.Tense)}</p>`
     : '';
 
+  const errorBanner = lastVerbError
+    ? `<div class="mt-4 text-sm text-red-300 bg-red-950/50 border border-red-900 rounded-lg px-3 py-2">
+         <span class="font-semibold">Last mistake:</span> ${escapeHtml(lastVerbError)}
+       </div>`
+    : '';
+
   quizEl.innerHTML = `
     <div class="bg-slate-800 rounded-xl p-6 max-w-sm">
       <p class="text-sm text-slate-400 mb-1">${escapeHtml(wf.NativeWord)}</p>
@@ -662,6 +680,7 @@ function showVerbQuizItem() {
       <p id="verb-feedback" class="mt-3 text-sm"></p>
       <p class="mt-2 text-xs text-slate-500">${formQueue.length} form${formQueue.length === 1 ? '' : 's'} left</p>
     </div>
+    ${errorBanner}
   `;
 
   document.getElementById('check-verb-btn').addEventListener('click', async () => {
@@ -676,7 +695,8 @@ function showVerbQuizItem() {
       formQueue.shift();
     } else {
       feedback.className = 'mt-3 text-sm text-red-400';
-      feedback.textContent = `Not quite. Correct answer: ${wf.Form}. You'll see this one again.`;
+      feedback.textContent = 'Not quite — see below.';
+      lastVerbError = `"${wf.Subject} ${wf.NativeWord}" — correct answer: ${wf.Form}`;
       formQueue.push(formQueue.shift());
     }
 

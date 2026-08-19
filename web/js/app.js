@@ -220,6 +220,32 @@ async function maybeLevelUp(wordId, currentState) {
   return true;
 }
 
+// Flashcard level-up — same 1-in-N random chance style as write-mode, not
+// guaranteed on every checkmark tap.
+const FLASHCARD_LEVEL_UP_CHANCE = 20;
+
+async function levelUpDirect(wordId, currentState) {
+  if (Math.random() >= 1 / FLASHCARD_LEVEL_UP_CHANCE) return false;
+  const next = nextState(currentState);
+  if (!next) return false; // already mastered
+
+  if (navigator.onLine) {
+    try {
+      await apiFetch(`/words/${wordId}/state`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: next }),
+      });
+      return true;
+    } catch (err) {
+      await queueStateUpdate(wordId, next);
+      return true;
+    }
+  }
+
+  await queueStateUpdate(wordId, next);
+  return true;
+}
+
 // ---------- Languages tab ----------
 
 async function renderLanguages() {
@@ -490,47 +516,68 @@ async function renderTestWords() {
   el.innerHTML = `
     <div>
       <h2 class="text-lg font-medium mb-3">Test words</h2>
-      <form id="start-words-form" class="flex gap-2 mb-6">
-        <input id="word-count" type="number" min="1" value="10"
-          class="w-24 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2" />
-        <button class="bg-indigo-600 hover:bg-indigo-500 transition rounded-lg px-4 py-2">Start</button>
-      </form>
+
+      <label class="block text-sm mb-1 text-slate-300">How many words?</label>
+      <input id="word-count" type="number" min="1" value="10"
+        class="w-full max-w-xs rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 mb-4" />
+
+      <div class="flex gap-2 mb-6">
+        <button id="start-write-btn" type="button"
+          class="bg-indigo-600 hover:bg-indigo-500 transition rounded-lg px-4 py-2">Write</button>
+        <button id="start-flashcards-btn" type="button"
+          class="bg-indigo-600 hover:bg-indigo-500 transition rounded-lg px-4 py-2">Flashcards</button>
+      </div>
+
       <div id="word-quiz"></div>
     </div>
   `;
 
-  document.getElementById('start-words-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const count = Number(document.getElementById('word-count').value) || 10;
-    const languageId = getSelectedLanguageId();
-    if (!languageId) return;
+  document.getElementById('start-write-btn').addEventListener('click', () => startWordsTest('write'));
+  document.getElementById('start-flashcards-btn').addEventListener('click', () => startWordsTest('flashcards'));
+}
 
-    const quizEl = document.getElementById('word-quiz');
-    quizEl.innerHTML = '<p class="text-slate-400">Loading…</p>';
-    lastWordError = null;
+async function startWordsTest(mode) {
+  const count = Number(document.getElementById('word-count').value) || 10;
+  const languageId = getSelectedLanguageId();
+  if (!languageId) return;
 
-    if (navigator.onLine) {
-      try {
-        await withTimeout(syncAllData(languageId), 5000);
-      } catch (err) {
-        // best-effort refresh; fall through to whatever's already cached
-      }
+  const quizEl = document.getElementById('word-quiz');
+  quizEl.innerHTML = '<p class="text-slate-400">Loading…</p>';
+  lastWordError = null;
+
+  if (navigator.onLine) {
+    try {
+      await withTimeout(syncAllData(languageId), 5000);
+    } catch (err) {
+      // best-effort refresh; fall through to whatever's already cached
     }
+  }
 
-    const allWords = (await loadFullWordSet(languageId)) || [];
-    if (allWords.length === 0) {
-      quizEl.innerHTML = '<p class="text-slate-400">No words available yet. Connect to the internet at least once to download your words for offline testing.</p>';
-      return;
-    }
+  const allWords = (await loadFullWordSet(languageId)) || [];
+  if (allWords.length === 0) {
+    quizEl.innerHTML = '<p class="text-slate-400">No words available yet. Connect to the internet at least once to download your words for offline testing.</p>';
+    return;
+  }
 
-    wordQueue = weightedSample(allWords, count);
-    if (wordQueue.length === 0) {
+  if (mode === 'flashcards') {
+    wordFlashQueue = weightedSample(allWords, count);
+    if (wordFlashQueue.length === 0) {
       quizEl.innerHTML = '<p class="text-slate-400">All your words are already mastered — nothing to test.</p>';
       return;
     }
+    wordFlashReversed = false;
+    wordFlashLapRemaining = wordFlashQueue.length;
+    renderWordFlashcard();
+    return;
+  }
 
-    showWordQuizItem();
-  });
+  wordQueue = weightedSample(allWords, count);
+  if (wordQueue.length === 0) {
+    quizEl.innerHTML = '<p class="text-slate-400">All your words are already mastered — nothing to test.</p>';
+    return;
+  }
+
+  showWordQuizItem();
 }
 
 function showWordQuizItem() {
@@ -595,6 +642,74 @@ function showWordQuizItem() {
   });
 }
 
+// ---------- Test Words: flashcards mode ----------
+
+let wordFlashQueue = [];
+let wordFlashLapRemaining = 0;
+let wordFlashReversed = false;
+
+function advanceWordFlashcard() {
+  wordFlashLapRemaining--;
+  if (wordFlashLapRemaining <= 0) {
+    wordFlashReversed = !wordFlashReversed;
+    wordFlashLapRemaining = wordFlashQueue.length;
+  }
+  renderWordFlashcard();
+}
+
+function renderWordFlashcard() {
+  const quizEl = document.getElementById('word-quiz');
+  if (wordFlashQueue.length === 0) {
+    quizEl.innerHTML = `<p class="text-slate-400">Done — no more cards in this deck.</p>`;
+    return;
+  }
+
+  const w = wordFlashQueue[0];
+
+  const reversed = wordFlashReversed;
+  const topText = reversed ? `${w.Article ? w.Article + ' ' : ''}${w.LearningWord}` : w.NativeWord;
+  const hiddenText = reversed ? w.NativeWord : `${w.Article ? w.Article + ' ' : ''}${w.LearningWord}`;
+  const markIcon = reversed ? '✕' : '✓';
+
+  quizEl.innerHTML = `
+    <div class="max-w-sm">
+      <div class="bg-slate-800 rounded-t-xl px-6 py-10 text-center">
+        <p class="text-2xl font-semibold">${escapeHtml(topText)}</p>
+      </div>
+      <div id="flash-reveal" class="relative w-full bg-slate-900 hover:bg-slate-950 transition rounded-b-xl px-6 py-10 text-center border-t border-slate-700 cursor-pointer select-none">
+        <span id="flash-hidden-text" class="text-xl text-slate-500">Tap to reveal</span>
+        <button id="flash-mark-btn" type="button"
+          class="absolute bottom-3 right-3 w-9 h-9 flex items-center justify-center rounded-full bg-slate-700 hover:bg-emerald-700 text-lg transition">
+          ${markIcon}
+        </button>
+      </div>
+      <div class="flex justify-between items-center mt-3">
+        <span class="text-xs text-slate-500">${wordFlashQueue.length} card${wordFlashQueue.length === 1 ? '' : 's'} left</span>
+        <button id="flash-next-btn" type="button" class="text-slate-300 hover:text-white text-xl leading-none">→</button>
+      </div>
+    </div>
+  `;
+
+  let revealed = false;
+  document.getElementById('flash-reveal').addEventListener('click', () => {
+    revealed = !revealed;
+    document.getElementById('flash-hidden-text').textContent = revealed ? hiddenText : 'Tap to reveal';
+  });
+
+  document.getElementById('flash-mark-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await levelUpDirect(w.ID, w.State);
+    wordFlashQueue.shift();
+    advanceWordFlashcard();
+  });
+
+  document.getElementById('flash-next-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    wordFlashQueue.push(wordFlashQueue.shift());
+    advanceWordFlashcard();
+  });
+}
+
 // ---------- Test Verbs tab ----------
 
 let formQueue = [];
@@ -606,47 +721,68 @@ async function renderTestVerbs() {
   el.innerHTML = `
     <div>
       <h2 class="text-lg font-medium mb-3">Test verb forms</h2>
-      <form id="start-verbs-form" class="flex gap-2 mb-6">
-        <input id="verb-count" type="number" min="1" value="10"
-          class="w-24 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2" />
-        <button class="bg-indigo-600 hover:bg-indigo-500 transition rounded-lg px-4 py-2">Start</button>
-      </form>
+
+      <label class="block text-sm mb-1 text-slate-300">How many forms?</label>
+      <input id="verb-count" type="number" min="1" value="10"
+        class="w-full max-w-xs rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 mb-4" />
+
+      <div class="flex gap-2 mb-6">
+        <button id="start-verb-write-btn" type="button"
+          class="bg-indigo-600 hover:bg-indigo-500 transition rounded-lg px-4 py-2">Write</button>
+        <button id="start-verb-flashcards-btn" type="button"
+          class="bg-indigo-600 hover:bg-indigo-500 transition rounded-lg px-4 py-2">Flashcards</button>
+      </div>
+
       <div id="verb-quiz"></div>
     </div>
   `;
 
-  document.getElementById('start-verbs-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const count = Number(document.getElementById('verb-count').value) || 10;
-    const languageId = getSelectedLanguageId();
-    if (!languageId) return;
+  document.getElementById('start-verb-write-btn').addEventListener('click', () => startVerbsTest('write'));
+  document.getElementById('start-verb-flashcards-btn').addEventListener('click', () => startVerbsTest('flashcards'));
+}
 
-    const quizEl = document.getElementById('verb-quiz');
-    quizEl.innerHTML = '<p class="text-slate-400">Loading…</p>';
-    lastVerbError = null;
+async function startVerbsTest(mode) {
+  const count = Number(document.getElementById('verb-count').value) || 10;
+  const languageId = getSelectedLanguageId();
+  if (!languageId) return;
 
-    if (navigator.onLine) {
-      try {
-        await withTimeout(syncAllData(languageId), 5000);
-      } catch (err) {
-        // best-effort refresh; fall through to whatever's already cached
-      }
+  const quizEl = document.getElementById('verb-quiz');
+  quizEl.innerHTML = '<p class="text-slate-400">Loading…</p>';
+  lastVerbError = null;
+
+  if (navigator.onLine) {
+    try {
+      await withTimeout(syncAllData(languageId), 5000);
+    } catch (err) {
+      // best-effort refresh; fall through to whatever's already cached
     }
+  }
 
-    const allForms = (await loadFullWordFormSet(languageId)) || [];
-    if (allForms.length === 0) {
-      quizEl.innerHTML = '<p class="text-slate-400">No verb forms available yet. Connect to the internet at least once to download them for offline testing.</p>';
-      return;
-    }
+  const allForms = (await loadFullWordFormSet(languageId)) || [];
+  if (allForms.length === 0) {
+    quizEl.innerHTML = '<p class="text-slate-400">No verb forms available yet. Connect to the internet at least once to download them for offline testing.</p>';
+    return;
+  }
 
-    formQueue = weightedSample(allForms, count);
-    if (formQueue.length === 0) {
+  if (mode === 'flashcards') {
+    formFlashQueue = weightedSample(allForms, count);
+    if (formFlashQueue.length === 0) {
       quizEl.innerHTML = '<p class="text-slate-400">All related words are already mastered — nothing to test.</p>';
       return;
     }
+    formFlashReversed = false;
+    formFlashLapRemaining = formFlashQueue.length;
+    renderVerbFlashcard();
+    return;
+  }
 
-    showVerbQuizItem();
-  });
+  formQueue = weightedSample(allForms, count);
+  if (formQueue.length === 0) {
+    quizEl.innerHTML = '<p class="text-slate-400">All related words are already mastered — nothing to test.</p>';
+    return;
+  }
+
+  showVerbQuizItem();
 }
 
 function showVerbQuizItem() {
@@ -701,6 +837,83 @@ function showVerbQuizItem() {
     }
 
     setTimeout(showVerbQuizItem, 1500);
+  });
+}
+
+// ---------- Test Verbs: flashcards mode ----------
+
+let formFlashQueue = [];
+let formFlashLapRemaining = 0;
+let formFlashReversed = false;
+
+function advanceVerbFlashcard() {
+  formFlashLapRemaining--;
+  if (formFlashLapRemaining <= 0) {
+    formFlashReversed = !formFlashReversed;
+    formFlashLapRemaining = formFlashQueue.length;
+  }
+  renderVerbFlashcard();
+}
+
+function renderVerbFlashcard() {
+  const quizEl = document.getElementById('verb-quiz');
+  if (formFlashQueue.length === 0) {
+    quizEl.innerHTML = `<p class="text-slate-400">Done — no more cards in this deck.</p>`;
+    return;
+  }
+
+  const wf = formFlashQueue[0];
+
+  const reversed = formFlashReversed;
+  const tenseLine = wf.Tense
+    ? `<p class="text-xs text-slate-500 mb-1">${escapeHtml(wf.Tense)}</p>`
+    : '';
+
+  const topText = reversed
+    ? escapeHtml(wf.Form)
+    : `${escapeHtml(wf.NativeWord)} (${escapeHtml(wf.Subject)})`;
+  const hiddenText = reversed
+    ? `${escapeHtml(wf.NativeWord)} (${escapeHtml(wf.Subject)})`
+    : escapeHtml(wf.Form);
+  const markIcon = reversed ? '✕' : '✓';
+
+  quizEl.innerHTML = `
+    <div class="max-w-sm">
+      <div class="bg-slate-800 rounded-t-xl px-6 py-10 text-center">
+        ${tenseLine}
+        <p class="text-2xl font-semibold">${topText}</p>
+      </div>
+      <div id="flash-reveal" class="relative w-full bg-slate-900 hover:bg-slate-950 transition rounded-b-xl px-6 py-10 text-center border-t border-slate-700 cursor-pointer select-none">
+        <span id="flash-hidden-text" class="text-xl text-slate-500">Tap to reveal</span>
+        <button id="flash-mark-btn" type="button"
+          class="absolute bottom-3 right-3 w-9 h-9 flex items-center justify-center rounded-full bg-slate-700 hover:bg-emerald-700 text-lg transition">
+          ${markIcon}
+        </button>
+      </div>
+      <div class="flex justify-between items-center mt-3">
+        <span class="text-xs text-slate-500">${formFlashQueue.length} card${formFlashQueue.length === 1 ? '' : 's'} left</span>
+        <button id="flash-next-btn" type="button" class="text-slate-300 hover:text-white text-xl leading-none">→</button>
+      </div>
+    </div>
+  `;
+
+  let revealed = false;
+  document.getElementById('flash-reveal').addEventListener('click', () => {
+    revealed = !revealed;
+    document.getElementById('flash-hidden-text').textContent = revealed ? hiddenText : 'Tap to reveal';
+  });
+
+  document.getElementById('flash-mark-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await levelUpDirect(wf.WordID, wf.State);
+    formFlashQueue.shift();
+    advanceVerbFlashcard();
+  });
+
+  document.getElementById('flash-next-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    formFlashQueue.push(formFlashQueue.shift());
+    advanceVerbFlashcard();
   });
 }
 

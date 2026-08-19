@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RabbitVocab — Login</title>
+  <title>RabbitVocab — Register</title>
   <script src="https://cdn.tailwindcss.com"></script>
-	<link rel="manifest" href="/manifest.json" />
-	<link rel="icon" href="/icons/icon.svg" />
-	<meta name="theme-color" content="#4f46e5" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icons/icon.svg" />
+  <meta name="theme-color" content="#4f46e5" />
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center">
   <div class="w-full max-w-sm bg-slate-800 rounded-xl shadow-lg p-8">
-    <h1 class="text-2xl font-semibold mb-1">RabbitVocab</h1>
-    <p class="text-slate-400 mb-6 text-sm">Sign in to continue</p>
+    <h1 class="text-2xl font-semibold mb-1">Create account</h1>
+    <p class="text-slate-400 mb-6 text-sm">Start learning with RabbitVocab</p>
 
-    <form id="login-form" class="space-y-4">
+    <form id="register-form" class="space-y-4">
       <div>
         <label class="block text-sm mb-1 text-slate-300" for="username">Username</label>
         <input id="username" name="username" type="text" required autocomplete="username"
@@ -22,7 +22,12 @@
       </div>
       <div>
         <label class="block text-sm mb-1 text-slate-300" for="password">Password</label>
-        <input id="password" name="password" type="password" required autocomplete="current-password"
+        <input id="password" name="password" type="password" required autocomplete="new-password"
+          class="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-sm mb-1 text-slate-300" for="language-name">Language you're learning (optional)</label>
+        <input id="language-name" name="languageName" type="text" placeholder="e.g. German"
           class="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
       </div>
 
@@ -30,20 +35,16 @@
 
       <button type="submit"
         class="w-full bg-indigo-600 hover:bg-indigo-500 transition rounded-lg py-2 font-medium">
-        Sign in
+        Create account
       </button>
     </form>
-		<p class="mt-4 text-center text-sm text-slate-400">
-		  No account? <a href="/register.html" class="text-indigo-400 hover:underline">Register</a>
-		</p>
+
+    <p class="mt-4 text-center text-sm text-slate-400">
+      Already have an account? <a href="/index.html" class="text-indigo-400 hover:underline">Sign in</a>
+    </p>
   </div>
 
   <script src="/js/api.js"></script>
-  <script src="/js/login.js"></script>
-	<script>
-	  if ('serviceWorker' in navigator) {
-	    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
-	  }
-	</script>
+  <script src="/js/register.js"></script>
 </body>
 </html>

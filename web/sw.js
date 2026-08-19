@@ -1,13 +1,15 @@
-const CACHE_NAME = 'rabbitvocab-shell-v3';
+const CACHE_NAME = 'rabbitvocab-shell-v4';
 
 const SHELL_FILES = [
   '/index.html',
+  '/register.html',
   '/app.html',
   '/manifest.json',
   '/icons/icon.svg',
   '/js/api.js',
   '/js/app.js',
   '/js/login.js',
+  '/js/register.js',
   '/js/db.js',
 ];
 
